@@ -42,44 +42,51 @@ if os.path.exists(icc_path):
 else:
     print("ICC profile not found. Skiping color management.")
 
+def crop_to_16_9(image: Image.Image) -> Image.Image:
+    w, h = image.size
+    target_ratio = 16 / 9
+    current_ratio = w / h
+
+    if current_ratio > target_ratio:
+        new_w = round(h * target_ratio)
+        left = (w - new_w) // 2
+        return image.crop((left, 0, left + new_w, h))
+    elif current_ratio < target_ratio:
+        new_h = round(w / target_ratio)
+        top = (h - new_h) // 2
+        return image.crop((0, top, w, top + new_h))
+    return image
+
 for filename in os.listdir(input_dir):
     if filename.lower().endswith(supported_extensions):
         name, ext = os.path.splitext(filename)
         base_name = name.replace("@3x", "")
-        img_path = os.path.join(input_dir, filename)
-        img = Image.open(img_path).convert("RGB")
+        path = os.path.join(input_dir, filename)
+        img = Image.open(path).convert("RGB")
 
+        # Crop to 16:9
+        img = crop_to_16_9(img)
+
+        # iOS resize
         ios_ratio = ios_base_width / img.width
-        ios_base_height = int(img.height * ios_ratio)
-        ios_base_img = img.resize((ios_base_width, ios_base_height), Image.LANCZOS)
+        ios_height = int(img.height * ios_ratio)
+        ios_base = img.resize((ios_base_width, ios_height), Image.LANCZOS)
 
         for suffix, factor in ios_scales.items():
-            size = (int(ios_base_img.width * factor), int(ios_base_img.height * factor))
-            resized = ios_base_img.resize(size, Image.LANCZOS)
-            output_path = os.path.join(ios_dir, f"{base_name}{suffix}.jpg")
-            resized.save(
-                output_path,
-                format="JPEG",
-                quality=90,
-                optimize=True,
-                icc_profile=icc_profile
-            )
+            size = (int(ios_base.width * factor), int(ios_base.height * factor))
+            resized = ios_base.resize(size, Image.LANCZOS)
+            out_path = os.path.join(ios_dir, f"{base_name}{suffix}.jpg")
+            resized.save(out_path, format="JPEG", quality=100, optimize=True, icc_profile=icc_profile)
 
-        # Android export pipeline
+        # Android resize
         android_ratio = android_base_width / img.width
-        android_base_height = int(img.height * android_ratio)
-        android_base_img = img.resize((android_base_width, android_base_height), Image.LANCZOS)
+        android_height = int(img.height * android_ratio)
+        android_base = img.resize((android_base_width, android_height), Image.LANCZOS)
 
         for dpi, factor in android_scales.items():
-            size = (int(android_base_img.width * factor), int(android_base_img.height * factor))
-            resized = android_base_img.resize(size, Image.LANCZOS)
-            output_path = os.path.join(android_dirs[dpi], f"{base_name}.webp")
-            resized.save(
-                output_path,
-                format="WEBP",
-                quality=95,
-                method=6,
-                icc_profile=icc_profile
-            )
+            size = (int(android_base.width * factor), int(android_base.height * factor))
+            resized = android_base.resize(size, Image.LANCZOS)
+            out_path = os.path.join(android_dirs[dpi], f"{base_name}.webp")
+            resized.save(out_path, format="WEBP", quality=100, method=6, icc_profile=icc_profile)
 
 print("✅ Export complete.")
